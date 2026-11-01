@@ -1,0 +1,293 @@
+<title>Matchday XI</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+  /* Layout: one centred column. Header, a 16:9 pitch stage with HUD and menu layered on it, controls help, then the two squads. */
+  :root {
+    --night: #0e1c17;
+    --night-2: #16291f;
+    --chalk: #f2f0e6;
+    --yellow: #ffd23f;
+    --red: #ef4b36;
+    --line: rgba(242, 240, 230, 0.16);
+    --line-strong: rgba(242, 240, 230, 0.4);
+    --muted: rgba(242, 240, 230, 0.78);
+    --panel: rgba(8, 18, 13, 0.82);
+    --display: 'Big Shoulders Display', 'Arial Narrow', Impact, sans-serif;
+    --body: 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--night); color: var(--chalk); font: 16px/1.5 var(--body);
+    padding-block: 14px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  .app { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  h1 { margin: 0; font: 900 clamp(32px, 6vw, 46px) / 1 var(--display); letter-spacing: 0.03em; text-transform: uppercase; }
+  .ghost { background: rgba(8, 18, 13, 0.6); border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px 14px; font-size: 14px; }
+  .ghost:hover { background: rgba(242, 240, 230, 0.12); }
+
+  .stage {
+    position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 300px;
+    border-radius: 10px; overflow: hidden; background: #0c1511; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
+    user-select: none; -webkit-user-select: none;
+  }
+  canvas#c, canvas#gl { display: block; width: 100%; height: 100%; touch-action: none; }
+  canvas#hud2d { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .power { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); width: min(260px, 50%); background: var(--panel); border-radius: 6px; padding: 6px 10px 8px; }
+  .power span { display: block; font: 800 13px / 1 var(--display); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 5px; }
+  .power .bar { height: 8px; border-radius: 4px; background: rgba(242,240,230,0.15); overflow: hidden; }
+  .power i { display: block; height: 100%; width: 0; background: var(--yellow); }
+  .power.pass i { background: #7fd6ff; }
+  .power.sure i { background: #35e08a; box-shadow: 0 0 10px #35e08a; }
+  .power.sure span { color: #35e08a; }
+  .power { left: 26%; } .power.p2 { left: 74%; }
+  .replaybadge { position: absolute; left: 0; bottom: 13%; background: var(--red); color: #fff; font: 900 26px / 1 var(--display); letter-spacing: 0.14em; text-transform: uppercase; padding: 8px 22px 8px 18px; clip-path: polygon(0 0, 100% 0, 92% 100%, 0 100%); }
+  .lbx { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 0.45s ease; }
+  .lbx.top { top: 0; } .lbx.bot { bottom: 0; } .lbx.on { height: 11%; }
+  #skip { position: absolute; right: 12px; bottom: 12px; pointer-events: auto; }
+  #cambtn { position: absolute; top: 10px; left: 84px; pointer-events: auto; }
+
+  /* scoreboard, messages */
+  .hud { position: absolute; inset: 0; pointer-events: none; }
+  .board {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px; background: var(--panel); border-radius: 8px; padding: 6px 14px;
+    font: 800 clamp(18px, 3.2vw, 28px) / 1 var(--display); letter-spacing: 0.04em; white-space: nowrap;
+  }
+  .board b { font-weight: 900; font-size: 1.35em; min-width: 0.7em; text-align: center; color: var(--yellow); font-variant-numeric: tabular-nums; }
+  .board .kit { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--chalk); }
+  .clock { font-size: 0.7em; color: var(--muted); min-width: 2.6em; text-align: center; font-variant-numeric: tabular-nums; }
+  .toast {
+    position: absolute; top: 14%; left: 50%; transform: translateX(-50%); max-width: 86%; text-align: center;
+    background: var(--panel); border-radius: 6px; padding: 6px 14px; font-size: clamp(13px, 2.2vw, 17px); font-weight: 700; opacity: 0; transition: opacity 0.25s;
+  }
+  .toast.show { opacity: 1; }
+  .banner { position: absolute; left: 50%; top: 21%; transform: translate(-50%, -50%) scale(0.8); text-align: center; opacity: 0; transition: opacity 0.2s, transform 0.25s; width: 90%; }
+  .banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .banner h2 { margin: 0; font: 900 clamp(40px, 8vw, 86px) / 0.95 var(--display); text-transform: uppercase; color: var(--yellow); text-shadow: 0 5px 0 rgba(0, 0, 0, 0.4); }
+  .banner p { margin: 6px 0 0; font: 800 clamp(16px, 3vw, 28px) / 1.1 var(--display); letter-spacing: 0.06em; text-transform: uppercase; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); }
+  .cardflash {
+    position: absolute; left: 50%; bottom: 16%; transform: translateX(-50%) translateY(10px); display: flex; align-items: center; gap: 12px;
+    background: var(--panel); border-radius: 8px; padding: 8px 16px 8px 10px; opacity: 0; transition: opacity 0.2s, transform 0.25s;
+  }
+  .cardflash.show { opacity: 1; transform: translateX(-50%); }
+  .cardflash::before { content: ''; width: 22px; height: 30px; border-radius: 3px; background: var(--yellow); transform: rotate(-6deg); }
+  .cardflash.red::before { background: var(--red); }
+  .cardflash b { display: block; font: 800 clamp(16px, 2.6vw, 22px) / 1.1 var(--display); text-transform: uppercase; letter-spacing: 0.04em; }
+  .cardflash span { font-size: 14px; color: var(--muted); }
+  #pausebtn { position: absolute; top: 10px; left: 10px; pointer-events: auto; }
+
+  /* overlays */
+  .menu, .pause, .end { position: absolute; inset: 0; display: grid; overflow: auto; }
+  .menu { background: linear-gradient(90deg, rgba(8, 18, 13, 0.92) 0 46%, rgba(8, 18, 13, 0.35) 100%); align-items: center; padding: 16px clamp(16px, 4vw, 44px); }
+  .menu-in { max-width: 400px; display: flex; flex-direction: column; gap: 12px; }
+  .menu h2 { margin: 0; font: 900 clamp(34px, 7vw, 60px) / 0.95 var(--display); text-transform: uppercase; }
+  .label { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; display: block; }
+  .sel { width: 100%; background: rgba(8, 18, 13, 0.85); color: var(--chalk); border: 2px solid var(--line-strong); border-radius: 8px; padding: 9px 10px; font: 700 16px var(--body); }
+  .sel:focus-visible { outline: 3px solid var(--yellow); }
+  .picks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .teampick { display: flex; align-items: center; gap: 10px; text-align: left; background: rgba(242, 240, 230, 0.06); border: 2px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .teampick[aria-pressed="true"] { border-color: var(--yellow); background: rgba(255, 210, 63, 0.12); }
+  .teampick .sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--chalk); flex: none; }
+  .teampick .nm { display: block; font: 800 18px / 1.05 var(--display); text-transform: uppercase; letter-spacing: 0.03em; }
+  .teampick .rt { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+  .seg button { background: transparent; border: 0; padding: 8px 14px; font-size: 14px; line-height: 1; }
+  .seg button + button { border-left: 1px solid var(--line-strong); }
+  .seg button[aria-pressed="true"] { background: var(--chalk); color: var(--night); font-weight: 700; }
+  .btn {
+    align-self: flex-start; background: var(--yellow); color: #1b1600; border: 0; border-radius: 6px; padding: 11px 28px;
+    font: 800 22px / 1 var(--display); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.alt { background: transparent; color: var(--chalk); border: 1px solid var(--line-strong); }
+  .pause, .end { place-items: center; background: rgba(8, 18, 13, 0.78); padding: 16px; }
+  .card { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 520px; width: 100%; }
+  .card h2 { margin: 0; font: 900 clamp(36px, 8vw, 64px) / 1 var(--display); text-transform: uppercase; }
+  .card .btn { align-self: center; }
+  .btns-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  #end-score { font: 800 clamp(20px, 4vw, 30px) / 1.1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
+  #end-goals { font-size: 14px; color: var(--muted); }
+  #end-stats { width: 100%; display: grid; gap: 4px; }
+  #end-stats .row { display: grid; grid-template-columns: 3em 1fr 3em; background: rgba(242, 240, 230, 0.07); border-radius: 4px; padding: 3px 8px; font-size: 15px; font-variant-numeric: tabular-nums; }
+  #end-stats .row b { color: var(--yellow); }
+  #end-stats .row span { color: var(--muted); }
+
+  /* touch controls */
+  .touch { position: absolute; inset: auto 0 0 0; height: 56%; pointer-events: none; }
+  .touch > * { pointer-events: auto; touch-action: none; }
+  .stick { position: absolute; left: 14px; bottom: 14px; width: 120px; height: 120px; border-radius: 50%; background: rgba(242, 240, 230, 0.12); border: 2px solid rgba(242, 240, 230, 0.3); display: grid; place-items: center; }
+  .knob { width: 50px; height: 50px; border-radius: 50%; background: rgba(242, 240, 230, 0.55); }
+  .pad { position: absolute; right: 12px; bottom: 12px; width: 190px; height: 150px; }
+  .pad button {
+    position: absolute; border-radius: 50%; border: 2px solid rgba(242, 240, 230, 0.5); background: rgba(8, 18, 13, 0.55); color: var(--chalk);
+    font: 800 13px / 1 var(--display); letter-spacing: 0.06em; text-transform: uppercase; touch-action: none; -webkit-user-select: none; user-select: none; padding: 0;
+  }
+  .pad button.on { background: rgba(255, 210, 63, 0.7); color: #1b1600; }
+  .pad [data-act="shoot"] { width: 74px; height: 74px; right: 0; bottom: 0; font-size: 16px; background: rgba(255, 210, 63, 0.35); border-color: var(--yellow); }
+  .pad [data-act="pass"] { width: 58px; height: 58px; right: 82px; bottom: 6px; }
+  .pad [data-act="tackle"] { width: 52px; height: 52px; right: 4px; bottom: 82px; }
+  .pad [data-act="slide"] { width: 46px; height: 46px; right: 62px; bottom: 74px; }
+  .pad [data-act="switch"] { width: 44px; height: 44px; right: 112px; bottom: 66px; }
+  .pad [data-act="sprint"] { width: 44px; height: 44px; right: 140px; bottom: 14px; }
+
+  .help { margin: 0; max-width: 80ch; font-size: 15px; color: var(--muted); }
+  .help b { color: var(--chalk); }
+  h2.sec { margin: 8px 0 0; font: 900 clamp(28px, 5vw, 38px) / 1 var(--display); text-transform: uppercase; letter-spacing: 0.03em; }
+  .squads { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 22px; }
+  .squad h3 { margin: 0 0 10px; display: flex; align-items: center; gap: 10px; font: 800 24px / 1 var(--display); text-transform: uppercase; letter-spacing: 0.04em; }
+  .squad h3 i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--chalk); }
+  .squad h3 span { margin-left: auto; font: 400 14px var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .plist { display: grid; gap: 6px; }
+  .pcard { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 6px 12px 6px 6px; border-radius: 8px; background: var(--night-2); }
+  .pcard .face { width: 56px; height: 56px; border-radius: 6px; display: block; }
+  .pcard b { display: block; line-height: 1.2; }
+  .pcard small { display: block; font-size: 13px; color: var(--muted); line-height: 1.35; }
+  .pcard .ovr { font: 900 30px / 1 var(--display); color: var(--yellow); font-variant-numeric: tabular-nums; }
+  @media (max-width: 560px) { .picks { grid-template-columns: 1fr; } .menu { background: rgba(8, 18, 13, 0.9); } }
+</style>
+
+<main class="app">
+  <header class="top">
+    <h1>Matchday XI</h1>
+    <button class="ghost" id="mute" type="button" aria-pressed="false">Sound on</button>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="gl" role="img" aria-label="Eleven-a-side football match in 3D"></canvas>
+    <canvas id="c" hidden></canvas>
+    <canvas id="hud2d"></canvas>
+
+    <div class="hud" id="hud" hidden>
+      <div class="board"><i class="kit" id="k0"></i><span id="t0">RMD</span><b id="s0">0</b><span class="clock" id="clock">0'</span><b id="s1">0</b><span id="t1">BYM</span><i class="kit" id="k1"></i></div>
+      <button class="ghost" id="pausebtn" type="button">Pause</button>
+      <button class="ghost" id="cambtn" type="button">Camera</button>
+      <div class="power" id="power" hidden><span id="power-l">Shoot</span><div class="bar"><i id="power-fill"></i></div></div>
+      <div class="power p2" id="power2" hidden><span id="power2-l">Shoot</span><div class="bar"><i id="power2-fill"></i></div></div>
+      <div class="lbx top" id="lbt"></div><div class="lbx bot" id="lbb"></div>
+      <div class="replaybadge" id="replaybadge" hidden>Replay</div>
+      <button class="ghost" id="skip" type="button" hidden>Skip</button>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <div class="banner" id="banner"><h2 id="banner-h"></h2><p id="banner-p"></p></div>
+      <div class="cardflash" id="cardflash"><div><b id="cf-t"></b><span id="cf-p"></span></div></div>
+    </div>
+
+    <div class="touch" id="touch" hidden>
+      <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+      <div class="pad">
+        <button type="button" data-act="shoot">Shoot</button>
+        <button type="button" data-act="pass">Pass</button>
+        <button type="button" data-act="tackle">Tackle</button>
+        <button type="button" data-act="slide">Slide</button>
+        <button type="button" data-act="switch">Swap</button>
+        <button type="button" data-act="sprint">Run</button>
+      </div>
+    </div>
+
+    <div class="menu" id="menu">
+      <div class="menu-in">
+        <h2 id="menuTitle">Pick your teams</h2>
+        <div>
+          <span class="label">Game</span>
+          <div class="seg" id="games">
+            <button type="button" data-game="football" aria-pressed="true">Football</button>
+            <button type="button" data-game="illegal" aria-pressed="false">Illegal Soccer</button>
+            <button type="button" data-game="tactical" aria-pressed="false">Tactical 2v2</button>
+            <button type="button" data-game="futbasket" aria-pressed="false">FutBasket</button>
+          </div>
+        </div>
+        <div>
+          <span class="label">Mode</span>
+          <div class="seg" id="modes">
+            <button type="button" data-mode="solo" aria-pressed="true">1 Player</button>
+            <button type="button" data-mode="duo" aria-pressed="false">2 Players</button>
+            <button type="button" data-mode="cpu" aria-pressed="false">Watch CPUs</button>
+          </div>
+        </div>
+        <div>
+          <label class="label" for="homeSel" id="homeLab">Your team</label>
+          <select id="homeSel" class="sel"></select>
+        </div>
+        <div>
+          <label class="label" for="awaySel" id="awayLab">Opponent</label>
+          <select id="awaySel" class="sel"></select>
+        </div>
+        <div>
+          <span class="label" id="halfLab">Half length</span>
+          <div class="seg" id="halves">
+            <button type="button" data-half="120" aria-pressed="false">2 min</button>
+            <button type="button" data-half="180" aria-pressed="true">3 min</button>
+            <button type="button" data-half="300" aria-pressed="false">5 min</button>
+          </div>
+        </div>
+        <div>
+          <span class="label">Computer level</span>
+          <div class="seg" id="diffs">
+            <button type="button" data-diff="easy" aria-pressed="false">Easy</button>
+            <button type="button" data-diff="normal" aria-pressed="true">Normal</button>
+            <button type="button" data-diff="hard" aria-pressed="false">Hard</button>
+          </div>
+        </div>
+        <div id="paceRow">
+          <span class="label">Game speed</span>
+          <div class="seg" id="paces">
+            <button type="button" data-pace="0.62" aria-pressed="true">Relaxed</button>
+            <button type="button" data-pace="0.78" aria-pressed="false">Normal</button>
+            <button type="button" data-pace="1" aria-pressed="false">Fast</button>
+          </div>
+        </div>
+        <button class="btn" id="start" type="button">Kick off</button>
+      </div>
+    </div>
+
+    <div class="pause" id="pause" hidden>
+      <div class="card"><h2>Paused</h2>
+        <div class="btns-row"><button class="btn" id="resume" type="button">Resume</button><button class="btn alt" id="quit" type="button">Quit match</button></div>
+      </div>
+    </div>
+
+    <div class="end" id="end" hidden>
+      <div class="card">
+        <h2 id="end-h">Full time</h2>
+        <div id="end-score"></div>
+        <div id="end-goals"></div>
+        <div id="end-stats"></div>
+        <button class="btn" id="again" type="button">Play again</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="help"><span id="keyhelp"></span> <b>Power shot</b> hold shoot until the bar turns green and it goes in, every time. <b>Camera</b> V. <b>PS5 controller</b> plug it in and press any button: left stick moves; with the ball <b>Cross</b> pass, <b>Circle</b> shoot (hold to charge), <b>Square</b> lob, <b>Triangle</b> through ball; without it <b>Cross</b> or <b>L1</b> switches player, <b>Square</b> tackles, <b>Circle</b> slides; <b>R1</b> or <b>R2</b> sprint, <b>R3</b> camera, <b>Options</b> pause. In the menu use the d-pad: left/right picks your team, up/down the opponent, Cross kicks off. <b>Pause</b> P. A slide wins the ball more often, but a late one from behind is a foul, and fouls bring free kicks, penalties and cards. On a phone, turn it sideways and use the on-screen stick and buttons.</p>
+
+  <p class="help" id="fbhelp" hidden><b>FutBasket</b> a 3D street court where football meets basketball: 2 v 2, 2 minutes, most points wins. Run into the ball to dribble it. <b>Click</b> while dribbling to flick it into the air, then <b>click again</b> when it is near you to volley it at the rival hoop (a bicycle kick). Baskets count 2 points, or 3 from beyond the yellow arc. Rivals slide-tackle (you stumble for 1 s and drop the ball) and jump to head shots away. <b>Keys</b> A / D or arrows run, W or Space jump, S or Shift slide, click or K flick and volley, Q swap player. <b>PS5</b>: stick or d-pad run, Cross jump, Square flick and volley, Circle slide, L1 swap.</p>
+  <p class="help" id="tachelp" hidden><b>Tactical 2v2</b> you and a team-mate against two rivals, first to 3 goals. Everything costs <b>energy</b> (the yellow bar): sprinting, kicking, shooting and dashing drain it, standing still refills it fastest. Guns fire slowly (Pistol every 0.6 s, Boomstick every 1.5 s) and the bullets are slow, so you can step out of the way. A hit never hurts: it <b>stuns</b> a player for 1.5 s (slow, grey, ball dropped). Rings: blue is a team-mate, red is a rival, gold carries the ball. Dribbling magnetises the ball to your feet but a sharp turn loses it. Same keys as Illegal Soccer: move WASD, fire L, kick K (hold), pass J, dash I, swap Q, sprint Shift.</p>
+  <p class="help" id="ilhelp" hidden><b>Illegal Soccer</b> 5 v 5, no rules, no refs. Grab glowing crates for blasters (Spray SMG, Boomstick, Longshot, Rocketeer, Boing Cannon), medkits and speed boots. Shoot players to knock them down; run out of health and you are out for a few seconds. Score by getting the ball in the goal: carry it, pass it, kick it, or blast it in with a rocket. First to 5 goals wins, or most goals when time is up. <b>Keys</b> move WASD, <b>fire</b> L (hold), kick K (hold to charge), pass J or Space, dash I, swap player Q, sprint Shift. Two players: P1 WASD, fire R, kick G, pass F, dash T, swap Q. P2 arrows, fire /, kick full stop, pass comma, dash semicolon, swap '. <b>PS5</b>: Square or L2 fire, Cross pass, Circle kick, Triangle dash, L1 swap, R1 or R2 sprint.</p>
+
+  <h2 class="sec">The squads</h2>
+  <div class="squads" id="squads"></div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/data.js"></script>
+<script src="js/portrait.js"></script>
+<script src="js/actions.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/input.js"></script>
+<script src="js/render.js"></script>
+<script src="js/r3_scene.js"></script>
+<script src="js/r3_actors.js"></script>
+<script src="js/r3_view.js"></script>
+<script src="js/illegal.js"></script>
+<script src="js/illegal_view.js"></script>
+<script src="js/futbasket.js"></script>
+<script src="js/main.js"></script>
