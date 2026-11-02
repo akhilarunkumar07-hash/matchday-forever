@@ -94,23 +94,6 @@
   /* ---------------- menu, pause, full time ---------------- */
   function startDemo() { G.mode = 'cpu'; G.newMatch({ human: -1, humans: [false, false], halfLen: 75, diff: 'normal' }); }
 
-  function startIllegal(tac) {
-    if (!use3d) { toast('Illegal Soccer needs 3D graphics, which this browser could not start'); return; }
-    audio(); G.running = true; paused = false; endShown = false; endTimer = 0;
-    G.setTeams(sel.home, sel.away);
-    G.mode = sel.mode === 'duo' ? 'duo' : 'solo';
-    const hum = [sel.mode !== 'cpu', sel.mode === 'duo'];
-    G.newMatch({ human: 0, humans: hum, halfLen: 90, diff: sel.diff }); // only so the controls are live; the football match itself is not played
-    G.il.start({ humans: hum, limit: sel.half, target: tac ? 3 : 5, diff: sel.diff, tac: !!tac });
-    R.ilBuild();
-    $('t0').textContent = G.TEAMS[0].short; $('t1').textContent = G.TEAMS[1].short;
-    $('k0').style.background = G.TEAMS[0].color; $('k1').style.background = G.TEAMS[1].color;
-    menu.hidden = true; endEl.hidden = true; pauseEl.hidden = true; hud.hidden = false; touch.hidden = !isTouch || sel.mode === 'cpu';
-    $('power').hidden = $('power2').hidden = true;
-    const lab = { tackle: 'Fire', slide: 'Dash' }; document.querySelectorAll('[data-act]').forEach((b) => { if (lab[b.dataset.act]) b.textContent = lab[b.dataset.act]; });
-    toast(tac ? 'Tactical 2v2: watch your energy bar. Slow shots can be dodged. A hit stuns for 1.5 s.' : sel.mode === 'cpu' ? 'Illegal Soccer: sit back and watch the chaos' : sel.mode === 'duo' ? 'Illegal Soccer! P1 vs P2. Grab the glowing crates!' : 'Illegal Soccer! Grab the glowing crates and shoot anyone in your way');
-  }
-
   function startFB() {
     if (!use3d) { toast('FutBasket needs 3D graphics, which this browser could not start'); return; }
     audio(); G.running = true; paused = false; endShown = false; endTimer = 0;
@@ -125,7 +108,6 @@
 
   function startMatch() {
     if (sel.game === 'futbasket') return startFB();
-    if (sel.game === 'illegal' || sel.game === 'tactical') return startIllegal(sel.game === 'tactical');
     audio(); G.running = true; paused = false; endShown = false; endTimer = 0;
     G.setTeams(sel.home, sel.away);
     G.mode = sel.mode;
@@ -138,16 +120,12 @@
     $('power').hidden = $('power2').hidden = true; touch.hidden = !isTouch || sel.mode !== 'solo';
   }
 
-  function leaveIllegal() {
+  function leaveFB() {
     if (G.fb.active) { G.fb.stop(); $('clock').style.fontSize = ''; }
-    if (!G.il.active) return;
-    G.il.stop(); R.ilDestroy();
-    const lab = { tackle: 'Tackle', slide: 'Slide' }; document.querySelectorAll('[data-act]').forEach((b) => { if (lab[b.dataset.act]) b.textContent = lab[b.dataset.act]; });
-    $('clock').style.fontSize = '';
   }
 
   function toMenu() {
-    leaveIllegal();
+    leaveFB();
     G.running = false; paused = false; startDemo();
     menu.hidden = false; endEl.hidden = true; pauseEl.hidden = true; hud.hidden = true; touch.hidden = true;
   }
@@ -162,19 +140,6 @@
     $('end-score').textContent = a.name + ' ' + m.score[0] + ' - ' + m.score[1] + ' ' + b.name;
     $('end-goals').textContent = m.goals.length ? m.goals.map((g) => g.who + (g.og ? ' (og)' : '') + " " + g.min + "' [" + G.TEAMS[g.team].short + ']').join('   ') : 'No goals';
     const rows = [['Shots', s.shots], ['Saves', s.saves], ['Passes', s.passes], ['Fouls', s.fouls], ['Yellow cards', s.yellow], ['Red cards', s.red]];
-    $('end-stats').innerHTML = rows.map((r) => '<div class="row"><b>' + r[1][0] + '</b><span>' + r[0] + '</span><b>' + r[1][1] + '</b></div>').join('');
-    endEl.hidden = false; $('again').focus({ preventScroll: true });
-  }
-
-  function showEndIL() {
-    endShown = true;
-    const I = G.il, a = G.TEAMS[0], b = G.TEAMS[1], s = I.stats;
-    const d = I.score[0] - I.score[1];
-    $('end-h').textContent = d === 0 ? 'Draw' : sel.mode === 'solo' ? (d > 0 ? 'You win!' : 'You lose') : sel.mode === 'duo' ? (d > 0 ? 'Player 1 wins!' : 'Player 2 wins!') : (d > 0 ? a.name : b.name) + ' win';
-    $('end-score').textContent = a.name + ' ' + I.score[0] + ' - ' + I.score[1] + ' ' + b.name;
-    const top = I.players.slice().sort((x, y) => (y.goals * 3 + y.elims) - (x.goals * 3 + x.elims))[0];
-    $('end-goals').textContent = top ? 'Star player: ' + top.name + ' (' + top.goals + ' goals, ' + top.elims + ' knock-outs)' : '';
-    const rows = [['Goals', s.goals], ['Knock-outs', s.elims], ['Kicks', s.kicks], ['Pickups', s.picks]];
     $('end-stats').innerHTML = rows.map((r) => '<div class="row"><b>' + r[1][0] + '</b><span>' + r[0] + '</span><b>' + r[1][1] + '</b></div>').join('');
     endEl.hidden = false; $('again').focus({ preventScroll: true });
   }
@@ -242,10 +207,11 @@
     $('keyhelp').textContent = v === 'duo' ? G.keyHelp.duo : G.keyHelp.solo;
   });
   group('#games button', 'game', (v) => {
-    sel.game = v; const fbk = v === 'futbasket', il = v === 'illegal' || v === 'tactical', tc = v === 'tactical';
-    $('menuTitle').textContent = fbk ? 'FutBasket' : tc ? 'Tactical 2v2' : il ? 'Illegal Soccer' : 'Pick your teams'; $('halfLab').textContent = il ? 'Match length' : 'Half length';
-    $('paceRow').hidden = il || fbk; $('fbhelp').hidden = !fbk; $('halfLab').parentElement.hidden = fbk; $('ilhelp').hidden = !il; $('tachelp').hidden = !tc; if (il) $('ilhelp').hidden = tc; $('start').textContent = il || fbk ? "Let's go" : 'Kick off';
-    $('keyhelp').parentElement.hidden = il || fbk;
+    sel.game = v; const fbk = v === 'futbasket';
+    $('menuTitle').textContent = fbk ? 'FutBasket' : 'Pick your teams';
+    $('paceRow').hidden = fbk; $('fbhelp').hidden = !fbk; $('halfLab').parentElement.hidden = fbk;
+    $('start').textContent = fbk ? "Let's go" : 'Kick off';
+    $('keyhelp').parentElement.hidden = fbk;
   });
   group('#halves button', 'half', (v) => { sel.half = +v; });
   group('#diffs button', 'diff', (v) => { sel.diff = v; });
@@ -342,40 +308,6 @@
     });
   }
 
-  function ilEvents(evs) {
-    for (const e of evs) {
-      if (e.k === 'muzzle') {
-        if (e.w === 'rocket') { tone(160, 0.35, 'sawtooth', 0.16, 0, 60); }
-        else if (e.w === 'boom') { tone(130, 0.22, 'sawtooth', 0.18, 0, 50); tone(900, 0.06, 'square', 0.06, 0, 200); }
-        else if (e.w === 'snipe') { tone(1400, 0.18, 'square', 0.1, 0, 120); tone(80, 0.3, 'sawtooth', 0.15, 0, 40); }
-        else if (e.w === 'boing') { tone(300, 0.3, 'sine', 0.16, 0, 800); }
-        else if (e.w === 'spray') { tone(800, 0.04, 'square', 0.04, 0, 400); }
-        else tone(1000, 0.07, 'square', 0.06, 0, 350);
-      } else if (e.k === 'hit') tone(260, 0.07, 'triangle', 0.1, 0, 120);
-      else if (e.k === 'boom') { tone(90, 0.6, 'sawtooth', 0.28, 0, 28); tone(240, 0.3, 'square', 0.08, 0, 50); cheer = Math.max(cheer, 0.4); if (G.rumble) G.rumble(180, 0.8, 0.5); }
-      else if (e.k === 'elim') { tone(520, 0.45, 'sawtooth', 0.1, 0, 110); cheer = Math.max(cheer, 0.5); }
-      else if (e.k === 'pick') tone(700, 0.12, 'sine', 0.1, 0, 1300);
-      else if (e.k === 'crate') tone(500, 0.1, 'sine', 0.05, 0, 900);
-      else if (e.k === 'kick') tone(170, 0.08, 'triangle', 0.14, 0, 70);
-      else if (e.k === 'stun') tone(190, 0.3, 'triangle', 0.13, 0, 70);
-      else if (e.k === 'dash' || e.k === 'bash') tone(200, 0.12, 'sawtooth', 0.06, 0, 90);
-      else if (e.k === 'respawn') tone(400, 0.2, 'sine', 0.06, 0, 900);
-      else if (e.k === 'fight') { banner(G.il.tac ? 'Go!' : 'Fight!', 'First to ' + G.il.target + ' goals', ''); whistle(); }
-      else if (e.k === 'sudden') banner('Sudden death', 'Next goal wins', '');
-      else if (e.k === 'goal') { cheer = 1; banner(e.og ? 'Own goal!' : 'Goal!', e.p.name + ' (' + G.TEAMS[e.team].short + ')', ''); [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.22, 'triangle', 0.1, i * 0.1)); }
-      else if (e.k === 'end') whistle();
-    }
-  }
-  function ilHud(dt) {
-    const I = G.il;
-    $('s0').textContent = I.score[0]; $('s1').textContent = I.score[1];
-    const tl = Math.max(0, Math.ceil(I.timeLeft)), c = $('clock');
-    c.textContent = I.sudden ? 'SD' : Math.floor(tl / 60) + ':' + ('0' + (tl % 60)).slice(-2);
-    if (toastT > 0 && (toastT -= dt) <= 0) $('toast').classList.remove('show');
-    if (bannerT > 0 && (bannerT -= dt) <= 0) $('banner').classList.remove('show');
-    $('replaybadge').hidden = true; $('skip').hidden = true; $('lbt').classList.remove('on'); $('lbb').classList.remove('on');
-  }
-
   let last = performance.now();
   function frame(now) {
     const rdt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
@@ -393,20 +325,6 @@
       if (F.over && !endShown) { endTimer += rdt; if (endTimer > 2) showEndFB(); }
       cheer = Math.max(0, cheer - rdt * 0.45);
       if (crowd) crowd.gain.setTargetAtTime(muted ? 0 : 0.02 + cheer * 0.1, ac.currentTime, 0.15);
-      requestAnimationFrame(frame); return;
-    }
-    if (G.il.active) {
-      if (I.cam) { I.cam = false; toast('Camera: ' + R.ilNextCam()); }
-      const IL = G.il;
-      if (!paused) IL.step(rdt);
-      const evs = IL.ev; IL.ev = [];
-      ilEvents(evs);
-      R.ilRender(rdt, evs, h2, hud2.width, hud2.height);
-      ilHud(rdt);
-      if (IL.over && !endShown) { endTimer += rdt; if (endTimer > 2) showEndIL(); }
-      cheer = Math.max(0, cheer - rdt * 0.45);
-      if (G.R3) G.R3.cheerLevel = IL.phase === 'goal' ? 1 : 0.35;
-      if (crowd) crowd.gain.setTargetAtTime(muted ? 0 : 0.03 + (IL.phase === 'goal' ? 0.11 : 0.04), ac.currentTime, 0.15);
       requestAnimationFrame(frame); return;
     }
     const m0 = G.m;
